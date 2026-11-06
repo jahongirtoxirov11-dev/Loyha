@@ -14,14 +14,13 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 )
 from reportlab.lib.pagesizes import letter, landscape
+from reportlab.pdfgen canvas = None # python-reportlab import to'g'rilandi
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from dotenv import load_dotenv
 
-# .env fayldan maxfiy ma'lumotlarni o'qish (agar mavjud bo'lsa)
 load_dotenv()
 
-# TOKEN va Admin ID ni serverdan (Environment Variables) olamiz
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_TELEGRAM_ID_RAW = os.getenv("ADMIN_TELEGRAM_ID")
 
@@ -34,7 +33,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 DB_NAME = "smart_school_v2.db"
 
-# ==================== DATABASE (MA'LUMOTLAR BAZASI) ====================
+# ==================== DATABASE ====================
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
         cur = conn.cursor()
@@ -695,10 +694,12 @@ async def start_practice_mode(callback: types.CallbackQuery):
     asyncio.create_task(run_duel_session(user_id, subject_id, user[2], None))
 
 
-# ==================== TURNIR & MATCHMAKING ====================
+# ==================== TURNIR & MATCHMAKING (TUZATILgan QISM) ====================
 @dp.message(F.text == "⚔️ Turnirda ishtirok etish")
 async def turnir_subjects(message: types.Message):
     user = get_user(message.from_user.id)
+    if not user:
+        return await message.answer("Iltimos, avval /start buyrug'ini bosing va ro'yxatdan o'ting.")
     if user[3] < 50:
         return await message.answer("⚠️ <b>Duelga kirish uchun kamida 50 ball kerak!</b>", parse_mode="HTML")
 
@@ -706,21 +707,21 @@ async def turnir_subjects(message: types.Message):
     if not subjects:
         return await message.answer("Hozircha fanlar qo'shilmagan.")
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=sub[1], callback_data=f"select_subject_{sub[0]}")] for sub in subjects
+        [InlineKeyboardButton(text=sub[1], callback_data=f"turnir_sub_{sub[0]}")] for sub in subjects
     ])
     await message.answer("📚 Duel uchun fanni tanlang:", reply_markup=kb)
 
-@dp.callback_query(F.data.startswith("select_subject_"))
-async def subject_selected(callback: types.CallbackQuery):
+@dp.callback_query(F.data.startswith("turnir_sub_"))
+async def turnir_subject_selected(callback: types.CallbackQuery):
     subject_id = int(callback.data.split("_")[2])
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔍 Raqib topish", callback_data=f"find_rival_{subject_id}")]
+        [InlineKeyboardButton(text="🔍 Raqib topish", callback_data=f"turnir_find_{subject_id}")]
     ])
     await callback.message.edit_text("Fan tanlandi. Raqib qidirishni bosing:", reply_markup=kb)
     await callback.answer()
 
-@dp.callback_query(F.data.startswith("find_rival_"))
-async def find_rival(callback: types.CallbackQuery):
+@dp.callback_query(F.data.startswith("turnir_find_"))
+async def turnir_find_rival(callback: types.CallbackQuery):
     subject_id = int(callback.data.split("_")[2])
     user_id = callback.from_user.id
     user = get_user(user_id)
@@ -1274,7 +1275,6 @@ async def web_server():
 # ==================== MAIN ====================
 async def main():
     init_db()
-    # Veb-serverni va pollingni bir vaqtda ishga tushiramiz
     await web_server()
     await dp.start_polling(bot)
 
