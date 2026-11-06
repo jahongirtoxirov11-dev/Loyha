@@ -4,6 +4,7 @@ import string
 import os
 import time
 import sqlite3
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types, BaseMiddleware
 from aiogram.filters import CommandStart, CommandObject
 from aiogram.fsm.context import FSMContext
@@ -20,7 +21,7 @@ from dotenv import load_dotenv
 # .env fayldan maxfiy ma'lumotlarni o'qish (agar mavjud bo'lsa)
 load_dotenv()
 
-# TOKEN va Admin ID ni to'g'ridan-to'g'ri yozmaymiz, serverdan (Environment Variables) olamiz
+# TOKEN va Admin ID ni serverdan (Environment Variables) olamiz
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_TELEGRAM_ID_RAW = os.getenv("ADMIN_TELEGRAM_ID")
 
@@ -1255,8 +1256,26 @@ async def send_broadcast(message: types.Message, state: FSMContext):
             pass
     await message.answer(f"✅ E'lon {success} ta foydalanuvchiga yuborildi!", reply_markup=admin_menu_kb)
 
+
+# ==================== RENDER UCHUN WEB SERVER ====================
+async def handle_ping(request):
+    return web.Response(text="Bot is running and alive!")
+
+async def web_server():
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+
+# ==================== MAIN ====================
 async def main():
     init_db()
+    # Veb-serverni va pollingni bir vaqtda ishga tushiramiz
+    await web_server()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
