@@ -4,7 +4,7 @@ import string
 import os
 import time
 import sqlite3
-from aiohttp import web
+from aiohttp import web  # Render Web Service "Live" bo'lishi uchun kerak
 from aiogram import Bot, Dispatcher, F, types, BaseMiddleware
 from aiogram.filters import CommandStart, CommandObject
 from aiogram.fsm.context import FSMContext
@@ -14,26 +14,21 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 )
 from reportlab.lib.pagesizes import letter, landscape
-from reportlab.pdfgen canvas = None # python-reportlab import to'g'rilandi
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
-from dotenv import load_dotenv
 
-load_dotenv()
-
+# ==================== MAXFIY MA'LUMOTLAR (ENVIRONMENT VARIABLES) ====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_TELEGRAM_ID_RAW = os.getenv("ADMIN_TELEGRAM_ID")
+ADMIN_TELEGRAM_ID = int(os.getenv("ADMIN_TELEGRAM_ID", "8371392099"))
 
 if not BOT_TOKEN:
-    raise ValueError("XATOLIK: BOT_TOKEN topilmadi! Server muhit o'zgaruvchilariga BOT_TOKEN ni kiriting.")
-
-ADMIN_TELEGRAM_ID = int(ADMIN_TELEGRAM_ID_RAW) if ADMIN_TELEGRAM_ID_RAW else 0
+    raise ValueError("XATOLIK: BOT_TOKEN topilmadi! Render Environment Variables bo'limiga BOT_TOKEN ni kiriting.")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 DB_NAME = "smart_school_v2.db"
 
-# ==================== DATABASE ====================
+# ==================== DATABASE (MA'LUMOTLAR BAZASI) ====================
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
         cur = conn.cursor()
@@ -119,13 +114,13 @@ def get_user(telegram_id):
         return cur.fetchone()
 
 def get_user_league(rating):
-    if rating < 1200:
+    if rating < 3000:
         return "🥉 Bronza"
-    elif rating < 1500:
+    elif rating < 4000:
         return "🥈 Kumush"
-    elif rating < 2000:
+    elif rating < 5000:
         return "🥇 Oltin"
-    elif rating < 2500:
+    elif rating < 7000:
         return "💎 Olmos"
     else:
         return "👑 Grossmeyster"
@@ -202,6 +197,7 @@ def get_question_by_id(q_id):
         cur.execute("SELECT id, question_text, photo_id, option_a, option_b, option_c, option_d, correct FROM questions WHERE id = ?", (q_id,))
         return cur.fetchone()
 
+# --- XATOLAR USTIDA ISHLASH BAZA FUNKSIYALARI ---
 def add_mistake(user_id, question_id):
     with sqlite3.connect(DB_NAME) as conn:
         cur = conn.cursor()
@@ -232,6 +228,7 @@ def get_mistakes_count(user_id):
         cur.execute("SELECT COUNT(*) FROM user_mistakes WHERE user_id = ?", (user_id,))
         return cur.fetchone()[0]
 
+# --- REYTING FUNKSIYALARI ---
 def get_global_rating():
     with sqlite3.connect(DB_NAME) as conn:
         cur = conn.cursor()
@@ -472,8 +469,7 @@ async def check_sub_callback(callback: types.CallbackQuery, state: FSMContext):
 # ==================== ASOSIY HANDLERLAR, PROFIL VA SERTIFIKAT ====================
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message, command: CommandObject, state: FSMContext):
-    if ADMIN_TELEGRAM_ID:
-        add_admin(ADMIN_TELEGRAM_ID)
+    add_admin(ADMIN_TELEGRAM_ID)
     user = get_user(message.from_user.id)
     
     if not user and command.args and command.args.startswith("ref_"):
@@ -541,7 +537,7 @@ async def profile_handler(message: types.Message):
         mistakes_cnt = get_mistakes_count(message.from_user.id)
         league = get_user_league(u[3])
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📜 Sertifikatni yuklab olish (1500+ ball)", callback_data="download_my_cert")]
+            [InlineKeyboardButton(text="📜 Sertifikatni yuklab olish (6000+ ball)", callback_data="download_my_cert")]
         ])
         await message.answer(
             f"👤 <b>Ism:</b> {u[0]}\n"
@@ -559,8 +555,8 @@ async def download_cert_handler(callback: types.CallbackQuery):
     u = get_user(callback.from_user.id)
     if not u:
         return
-    if u[3] < 1500:
-        return await callback.answer(f"❌ Sertifikat olish uchun kamida 1500 ball (Oltin liga) kerak! Sizda hozir {u[3]} ball bor.", show_alert=True)
+    if u[3] < 6000:
+        return await callback.answer(f"❌ Sertifikat olish uchun kamida 6000 ball (Oltin liga) kerak! Sizda hozir {u[3]} ball bor.", show_alert=True)
     
     await callback.answer("⏳ Sertifikat tayyorlanmoqda...")
     league_clean = get_user_league(u[3]).split(" ")[1]
@@ -694,12 +690,10 @@ async def start_practice_mode(callback: types.CallbackQuery):
     asyncio.create_task(run_duel_session(user_id, subject_id, user[2], None))
 
 
-# ==================== TURNIR & MATCHMAKING (TUZATILgan QISM) ====================
+# ==================== TURNIR & MATCHMAKING ====================
 @dp.message(F.text == "⚔️ Turnirda ishtirok etish")
 async def turnir_subjects(message: types.Message):
     user = get_user(message.from_user.id)
-    if not user:
-        return await message.answer("Iltimos, avval /start buyrug'ini bosing va ro'yxatdan o'ting.")
     if user[3] < 50:
         return await message.answer("⚠️ <b>Duelga kirish uchun kamida 50 ball kerak!</b>", parse_mode="HTML")
 
@@ -707,21 +701,21 @@ async def turnir_subjects(message: types.Message):
     if not subjects:
         return await message.answer("Hozircha fanlar qo'shilmagan.")
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=sub[1], callback_data=f"turnir_sub_{sub[0]}")] for sub in subjects
+        [InlineKeyboardButton(text=sub[1], callback_data=f"select_subject_{sub[0]}")] for sub in subjects
     ])
     await message.answer("📚 Duel uchun fanni tanlang:", reply_markup=kb)
 
-@dp.callback_query(F.data.startswith("turnir_sub_"))
-async def turnir_subject_selected(callback: types.CallbackQuery):
+@dp.callback_query(F.data.startswith("select_subject_"))
+async def subject_selected(callback: types.CallbackQuery):
     subject_id = int(callback.data.split("_")[2])
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔍 Raqib topish", callback_data=f"turnir_find_{subject_id}")]
+        [InlineKeyboardButton(text="🔍 Raqib topish", callback_data=f"find_rival_{subject_id}")]
     ])
     await callback.message.edit_text("Fan tanlandi. Raqib qidirishni bosing:", reply_markup=kb)
     await callback.answer()
 
-@dp.callback_query(F.data.startswith("turnir_find_"))
-async def turnir_find_rival(callback: types.CallbackQuery):
+@dp.callback_query(F.data.startswith("find_rival_"))
+async def find_rival(callback: types.CallbackQuery):
     subject_id = int(callback.data.split("_")[2])
     user_id = callback.from_user.id
     user = get_user(user_id)
@@ -755,7 +749,7 @@ async def turnir_find_rival(callback: types.CallbackQuery):
             asyncio.create_task(run_duel_session(user_id, subject_id, grade, None))
 
 
-# ==================== DUEL, QUIZ VA 50/50 YORDAMCHISI ====================
+# ==================== DUEL, QUIZ VA "50/50" YORDAMCHISI ====================
 def build_question_kb(q_id, opt_a, opt_b, opt_c, opt_d, correct, include_5050=True):
     rows = [
         [InlineKeyboardButton(text=f"A) {opt_a}", callback_data=f"liveans_{q_id}_A_{correct}")],
@@ -828,7 +822,7 @@ async def run_duel_session(user_id, subject_id, grade, rival_id=None, custom_que
             )
 
         kb = build_question_kb(q_id, opt_a, opt_b, opt_c, opt_d, correct, include_5050=True)
-        full_caption = f"{scoreboard}<b>{i}-savol ({grade}-sinf):</b> ⏳ <i>15 sek</i>\n{q_text}"
+        full_caption = f"{scoreboard}<b>{i}-savol ({grade}-sinf):</b> ⏳ <i>45 sekunt</i>\n{q_text}"
         
         event = asyncio.Event()
         answered_events[user_id] = event
@@ -839,7 +833,7 @@ async def run_duel_session(user_id, subject_id, grade, rival_id=None, custom_que
             msg = await bot.send_message(user_id, full_caption, reply_markup=kb, parse_mode="HTML")
         
         try:
-            await asyncio.wait_for(event.wait(), timeout=15.0)
+            await asyncio.wait_for(event.wait(), timeout=45.0)
         except asyncio.TimeoutError:
             add_mistake(user_id, q_id)
             duel_detailed_stats[user_id].append({
@@ -989,7 +983,7 @@ async def process_promo(message: types.Message, state: FSMContext):
     asyncio.create_task(run_duel_session(creator_id, subject_id, user[2], message.from_user.id))
 
 
-# ==================== ADMIN PANEL VA FAYLDAN SAVOL YUKLASH ====================
+# ==================== ADMIN PANEL VA OMMAVIY (.TXT) SAVOL YUKLASH ====================
 @dp.message(F.text == "👑 Admin Panel")
 async def admin_panel(message: types.Message):
     if not is_admin(message.from_user.id): return
@@ -1001,6 +995,7 @@ async def back_menu(message: types.Message, state: FSMContext):
     is_adm = is_admin(message.from_user.id)
     await message.answer("Asosiy menyu:", reply_markup=main_menu_kb(is_adm))
 
+# --- FAYLDAN OMMAVIY SAVOL YUKLASH (.TXT) ---
 @dp.message(F.text == "📂 Fayldan savol yuklash (.txt)")
 async def bulk_upload_start(message: types.Message):
     if not is_admin(message.from_user.id): return
@@ -1027,7 +1022,11 @@ async def bulk_grade_chosen(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.delete()
     await callback.message.answer(
         f"✅ <b>{grade}-sinf</b> tanlandi.\n\n"
-        f"📂 Savollar yozilgan <b>.txt</b> faylni yuboring (Format: <code>Savol | A | B | C | D | Javob</code>):",
+        f"📂 Endi savollar yozilgan <b>.txt</b> faylni yuboring.\n"
+        f"Har bir qator quyidagi formatda (`|` belgisi bilan ajratilgan) bo'lishi kerak:\n\n"
+        f"<code>Savol matni | A variant | B variant | C variant | D variant | To'g'ri harf (A/B/C/D)</code>\n\n"
+        f"<b>Misol:</b>\n"
+        f"<code>2+2 nechiga teng? | 3 | 4 | 5 | 6 | B</code>",
         reply_markup=cancel_kb,
         parse_mode="HTML"
     )
@@ -1037,7 +1036,7 @@ async def bulk_grade_chosen(callback: types.CallbackQuery, state: FSMContext):
 @dp.message(AdminState.bulk_file, F.document)
 async def process_bulk_txt(message: types.Message, state: FSMContext):
     if not message.document.file_name.endswith(".txt"):
-        return await message.answer("❌ Faqat <b>.txt</b> formatidagi fayl yuboring!", parse_mode="HTML")
+        return await message.answer("❌ Iltimos, faqat <b>.txt</b> formatidagi fayl yuboring!", parse_mode="HTML")
     
     data = await state.get_data()
     subject_id = data['bulk_subject_id']
@@ -1061,9 +1060,9 @@ async def process_bulk_txt(message: types.Message, state: FSMContext):
         os.remove(temp_path)
 
     await state.clear()
-    await message.answer(f"🎉 Fayldan jami <b>{added_count} ta</b> savol bazaga qo'shildi!", reply_markup=admin_menu_kb, parse_mode="HTML")
+    await message.answer(f"🎉 Fayldan jami <b>{added_count} ta</b> savol muvaffaqiyatli bazaga qo'shildi!", reply_markup=admin_menu_kb, parse_mode="HTML")
 
-# --- MAJBURIY OBUNA ---
+# --- MAJBURIY OBUNA KANALLARINI BOSHQARISH ---
 @dp.message(F.text == "📢 Majburiy obuna")
 async def manage_channels(message: types.Message):
     if not is_admin(message.from_user.id): return
@@ -1075,7 +1074,7 @@ async def manage_channels(message: types.Message):
             text += f"• <a href='{link}'>{title}</a> (<code>{chat_id}</code>)\n"
             rows.append([InlineKeyboardButton(text=f"🗑 O'chirish: {title}", callback_data=f"del_ch_{ch_id}")])
     else:
-        text += "<i>Hozircha kanal ulanmagan.</i>\n"
+        text += "<i>Hozircha hech qanday kanal ulanmagan.</i>\n"
 
     rows.append([InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="add_new_channel")])
     await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows), parse_mode="HTML", disable_web_page_preview=True)
@@ -1258,24 +1257,27 @@ async def send_broadcast(message: types.Message, state: FSMContext):
     await message.answer(f"✅ E'lon {success} ta foydalanuvchiga yuborildi!", reply_markup=admin_menu_kb)
 
 
-# ==================== RENDER UCHUN WEB SERVER ====================
-async def handle_ping(request):
-    return web.Response(text="Bot is running and alive!")
+# ==================== RENDER UCHUN WEB SERVER VA ISHGA TUSHIRISH ====================
+async def health_check(request):
+    return web.Response(text="Smart School Bot is Live and Running!")
 
-async def web_server():
+async def start_web_server():
     app = web.Application()
-    app.router.add_get("/", handle_ping)
+    app.router.add_get("/", health_check)
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
+    # Render avtomatik ravishda PORT beradi, u orqali serverni bog'laymiz
+    port = int(os.environ.get("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
+    print(f"Web server {port}-portda ishga tushdi (Render Live holatda)...")
 
-
-# ==================== MAIN ====================
 async def main():
     init_db()
-    await web_server()
+    # 1. Render "In Progress" bo'lib qolmasligi uchun fonda port ochamiz
+    await start_web_server()
+    # 2. Eskirib qolgan xabarlarni o'tkazib yuborib, pollingni boshlaymiz
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
